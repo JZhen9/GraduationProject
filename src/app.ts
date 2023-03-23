@@ -1,12 +1,17 @@
 import express, { Application, Request, Response, NextFunction } from "express";
+// .env
 import dotenv from "dotenv"
+// middleware
 import morgan from "morgan"
+// colorful log(if export to file , take off)
 import chalk from "chalk"
 
+// get ur .env as process.env
 dotenv.config()
 
 const app: Application = express()
 
+// if process.env.PORT is undefined then port is 5000.
 const port = process.env.PORT || 5000
 
 let isShutdown = false
@@ -14,7 +19,9 @@ let isShutdown = false
 const morganMiddleware = morgan(function (tokens, req, res) {
     return [
         chalk.hex('#f78fb3').bold(tokens.date(req, res)),
+        // user's IP
         chalk.yellow(tokens['remote-addr'](req, res)),
+        // user's request method
         chalk.hex('#34ace0').bold(tokens.method(req, res)).padStart(38),
         chalk.hex('#ffb142').bold(tokens.status(req, res)),
         chalk.hex('#2ed573').bold(tokens['response-time'](req, res) + ' ms').padStart(42),
@@ -39,9 +46,9 @@ app.get('/', (req: Request, res: Response, next: NextFunction) => {
 });
 
 app.post('/', express.json(), (req: Request, res: Response, next: NextFunction) => {
-    Object.keys(req.body).forEach(key => {
-        console.log(req.body[key])
-    })
+    // Object.keys(req.body).forEach(key => {
+    //     console.log(req.body[key])
+    // })
     // console.log(req.body)
     res.json({
         "message": 'OK'
