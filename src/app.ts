@@ -3,8 +3,9 @@ import express, { Application, Request, Response, NextFunction } from "express";
 import dotenv from "dotenv"
 // middleware
 import morgan from "morgan"
-// colorful log(if export to file , take off)
-import chalk from "chalk"
+import {setLoggingColor} from "./middlewares/morganSettings";
+
+import {exportlogger} from "./middlewares/loggerSettings";
 
 // get ur .env as process.env
 dotenv.config()
@@ -16,18 +17,7 @@ const port = process.env.PORT || 5000
 
 let isShutdown = false
 
-const morganMiddleware = morgan(function (tokens, req, res) {
-    return [
-        chalk.hex('#f78fb3').bold(tokens.date(req, res)),
-        // user's IP
-        chalk.yellow(tokens['remote-addr'](req, res)),
-        // user's request method
-        chalk.hex('#34ace0').bold(tokens.method(req, res)).padStart(38),
-        chalk.hex('#ffb142').bold(tokens.status(req, res)),
-        chalk.hex('#2ed573').bold(tokens['response-time'](req, res) + ' ms').padStart(42),
-        chalk.hex('#ff5252').bold(tokens.url(req, res)),
-    ].join('  |  ')
-});
+const morganMiddleware = setLoggingColor(false)
 
 app.use((req: Request, res: Response, next: NextFunction) => {
     if (!isShutdown) {
@@ -61,8 +51,9 @@ let server = app.listen(port, () => {
 
 let cleanUp = () => {
     isShutdown = true
+    console.log(`server is shuting down...`)
     server.close(() => {
-        console.log(`server is shuting down`)
+        console.log(`server is already shutdown`)
         process.exit()
     })
 
