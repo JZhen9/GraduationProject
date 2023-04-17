@@ -111,6 +111,7 @@ wsRoute.on('connection', (ws: WebSocket, req: IncomingMessage) => {
                     userWs.send(`${time.toLocaleTimeString()} / ${name} : LEFT`);
                 }
             }
+            userInfos = userInfos.filter((user) => user["id"] != id);
         });
     }
 });
@@ -118,9 +119,13 @@ wsRoute.on('connection', (ws: WebSocket, req: IncomingMessage) => {
 let cleanUp = () => {
     isShutdown = true
     console.log(`server is shuting down...`)
+	for (let user of userInfos){
+	    user["ws"].send("server close...");
+	    user["ws"].close();
+	}
     server.close(() => {
-        console.log(`server is already shutdown`)
-        process.exit()
+        console.log(`server is already shutdown`);
+        process.exit();
     })
 
     setTimeout(() => {
