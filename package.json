@@ -26,12 +26,18 @@
     "chalk": "^4.1.2",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
+    "express-jwt": "^8.4.1",
+    "jsonwebtoken": "^9.0.0",
     "morgan": "^1.10.0",
+    "mysql": "^2.18.1",
+    "typeorm": "^0.3.15",
     "uuid": "^9.0.0",
     "ws": "^8.13.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.13",
+    "@types/express-jwt": "^7.4.2",
+    "@types/jsonwebtoken": "^9.0.2",
     "@types/morgan": "^1.9.3",
     "@types/node": "^18.0.1",
     "@types/ws": "^8.5.4",
