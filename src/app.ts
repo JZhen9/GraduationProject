@@ -97,6 +97,7 @@ createConnection(connectionOptions).then(async connection => {
 
 }).catch(error => console.log(error));
 
+// Login API
 app.post('/login', express.json(), async (request: Request, response: Response) => {
     if (request.body.account != null && request.body.pwd != null) {
         const reqUrl = url.parse(request.url)
@@ -124,6 +125,7 @@ app.post('/login', express.json(), async (request: Request, response: Response) 
     return response.status(400).send("請求中未包含帳號或密碼或是參數為空").end()
 })
 
+// Register API
 app.post('/register', express.json(), async (request: Request, response: Response) => {
     if (request.body.account != null && request.body.pwd != null && request.body.email != null) {
 
@@ -143,6 +145,11 @@ app.post('/register', express.json(), async (request: Request, response: Respons
         return response.status(200).type('text/plain').send("OK").end()
     }
     return response.status(400).send("請求中未包含帳號密碼或信箱或是參數為空").end()
+})
+
+// ping pong
+app.get('/ping', (require: Request, response: Response) => {
+    return response.status(200).send("pong pong pong").end()
 })
 
 const router = express.Router();
