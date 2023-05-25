@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
-import { User } from '../entity/User'
+import { User } from '../database/entity/user.entity'
 import { RequestWithUser } from '../types/expressTypes'
 import dotenv from 'dotenv';
 dotenv.config();
@@ -14,7 +14,7 @@ const secret = process.env.SECRET!;
 const jwtTool = {
   generateToken: (user: User): string => {
     const tokenData: TokenData = {
-      userId: user.id,
+      userId: user.user_id,
     };
 
     return jwt.sign(tokenData, secret);

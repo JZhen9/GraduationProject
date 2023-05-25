@@ -5,15 +5,12 @@ import dotenv from "dotenv"
 import morgan from "morgan"
 import { setLoggingColor } from "./middlewares/morganSettings"
 
-import { exportlogger } from "./middlewares/loggerSettings"
-
 // webSocket
 import websocket, { WebSocketServer, WebSocket } from 'ws'
 import { IncomingMessage } from 'http'
 
 // URL package
 import url, { URLSearchParams } from "url"
-import buildUrl from 'build-url-ts'
 import userInfo from "./userInfo"
 
 // UUID
@@ -24,16 +21,21 @@ import checkIsValidateURL from "./jesspackages/checkURL"
 
 // ORM
 import "reflect-metadata";
-import { createConnection, getConnection } from 'typeorm'
-import { User } from "./entity/User";
-import { getRepository } from 'typeorm';
-import { connectionOptions } from './ormconfig'
+import { User } from "./database/entity/user.entity";
+
+// connect to mysql
+import { myDataSource } from "./database/app_data_source"
 
 // 檢查 req.body 是否為 undefined || null
 import bodyParser from 'body-parser';
 
 // jwt tool
 import jwtTool, { authenticateToken } from './tools/jwtTool';
+import { json } from "stream/consumers"
+
+// objs
+import { loginResult } from './objs/login_result'
+import { registerResult } from './objs/register_result'
 
 // get ur .env as process.env
 dotenv.config()
@@ -72,79 +74,103 @@ let wsRoute = new WebSocketServer({
     server: server
 })
 
-// 創建 TypeORM 的連接
-createConnection(connectionOptions)
-    .then(() => console.log('Database connected'))
-    .catch((err) => console.error('Database connection error:', err));
-
-// 建立user表
-createConnection(connectionOptions).then(async connection => {
-
-    console.log("Connected to DB");
-
-    // 创建user表
-    await connection.query(
-        `CREATE TABLE IF NOT EXISTS user (
-        id INT NOT NULL AUTO_INCREMENT,
-        account VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        PRIMARY KEY (id)
-    )`);
-
-    // 将User实体类与user表映射
-    connection.getRepository(User);
-
-}).catch(error => console.log(error));
+// establish database connection
+myDataSource
+    .initialize()
+    .then(() => {
+        console.log("Data Source has been initialized!")
+    })
+    .catch((err) => {
+        console.error("Error during Data Source initialization:", err)
+    })
 
 // Login API
 app.post('/login', express.json(), async (request: Request, response: Response) => {
+    response.type('json')
+    let failedLogin: loginResult = {
+        resultStatus: 400,
+        errorMessage: "請求中未包含帳號或密碼或是參數為空",
+        resultData: ""
+    }
+    let successLogin: loginResult = {
+        resultStatus: 200,
+        errorMessage: "",
+        resultData: ""
+    }
+    let json = JSON.stringify(failedLogin)
+
     if (request.body.account != null && request.body.pwd != null) {
         const reqUrl = url.parse(request.url)
 
         // 將 account 與 pwd 與資料庫比對 return
 
         // 取得目前連線(mySQL)
-        const userRepository = getRepository(User);
-        const user = await userRepository.findOne({
+        const user_info = await myDataSource.getRepository(User).findOne({
             where: {
-                account: request.body.account,
+                user_name: request.body.account,
                 password: request.body.pwd,
             }
-        });
+        })
 
-        if (user == null){
-            return response.status(400).send("帳號密碼錯誤").end()
+        if (user_info == null){
+            failedLogin.resultStatus = 400
+            failedLogin.errorMessage = "帳號密碼錯誤"
+            json = JSON.stringify(failedLogin)
+            return response.status(400).send(json).end()
         }
 
         // 生成 token
-        const token = jwtTool.generateToken(user);
+        const token = jwtTool.generateToken(user_info);
+        successLogin.resultData = token
+        json = JSON.stringify(successLogin)
 
-        return response.status(200).type('text/plain').send(`account: ${request.body.account} , pwd: ${request.body.pwd}, token: ${token}`).end()
+        return response.send(json).end()
     }
-    return response.status(400).send("請求中未包含帳號或密碼或是參數為空").end()
+    
+    return response.status(400).send(json).end()
 })
 
 // Register API
 app.post('/register', express.json(), async (request: Request, response: Response) => {
+    response.type('json')
+    let failedRegister: registerResult = {
+        resultStatus: 400,
+        errorMessage: "請求中未包含帳號或密碼或是參數為空",
+        resultMessage: ""
+    }
+    let successRegister: registerResult = {
+        resultStatus: 200,
+        errorMessage: "",
+        resultMessage: "OK"
+    }
+    let json = JSON.stringify(failedRegister)
+
     if (request.body.account != null && request.body.pwd != null && request.body.email != null) {
 
         // 將 account email 與 pwd 存於資料庫 return OK
         try {
-            const userRepository = await getConnection().getRepository(User)
-            const user = userRepository.create({
-                account: request.body.account,
+            // 取得 User 實體的資料存取物件
+            const new_user =  await myDataSource.getRepository(User).create({
+                user_name: request.body.account,
+                sex_id: 2,
                 email: request.body.email,
                 password: request.body.pwd
-            });
-            await userRepository.save(user)
+            })
+            await myDataSource.getRepository(User).save(new_user)
         } catch (error) {
             // 以防萬一
-            return response.status(400).type('text/plain').send(error).end()
+            if (error instanceof Error) {
+                failedRegister.errorMessage = error.message
+            } else {
+                failedRegister.errorMessage = "Unknown Error"
+            }
+            json = JSON.stringify(failedRegister)
+            return response.status(400).send(json).end()
         }
-        return response.status(200).type('text/plain').send("OK").end()
+        json = JSON.stringify(successRegister)
+        return response.status(200).send(json).end()
     }
-    return response.status(400).send("請求中未包含帳號密碼或信箱或是參數為空").end()
+    return response.status(400).send(json).end()
 })
 
 // ping pong
@@ -156,6 +182,7 @@ const router = express.Router();
 router.use(authenticateToken)
 
 wsRoute.on('connection',  (ws: WebSocket, req: IncomingMessage) => {
+    req.headers
     if (req.url || req.url == "") {
         const location = url.parse(req.url) // 取得 Url
 
