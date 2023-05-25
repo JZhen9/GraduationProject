@@ -36,6 +36,7 @@ import { json } from "stream/consumers"
 // objs
 import { loginResult } from './objs/login_result'
 import { registerResult } from './objs/register_result'
+import { sendMail } from "./send_email"
 
 // get ur .env as process.env
 dotenv.config()
@@ -157,6 +158,9 @@ app.post('/register', express.json(), async (request: Request, response: Respons
                 password: request.body.pwd
             })
             await myDataSource.getRepository(User).save(new_user)
+            sendMail(new_user.email)
+                .then(result => console.log('Email Sent...', result))
+                .catch((error) => console.log('Error: ', error))
         } catch (error) {
             // 以防萬一
             if (error instanceof Error) {
