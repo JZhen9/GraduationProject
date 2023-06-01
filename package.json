@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "tsc -p . && node dist/app.js",
-    "dev": "nodemon src/app.ts",
+    "dev": "ts-node src/app.ts",
     "build": "tsc -p ."
   },
   "repository": {
@@ -32,6 +32,7 @@
     "morgan": "^1.10.0",
     "mysql": "^2.18.1",
     "nodemailer": "^6.9.2",
+    "redis": "^4.6.6",
     "reflect-metadata": "^0.1.13",
     "typeorm": "^0.3.15",
     "uuid": "^9.0.0",

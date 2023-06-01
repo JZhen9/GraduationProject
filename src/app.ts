@@ -1,13 +1,15 @@
 import express, { Application, Request, Response, NextFunction } from "express"
+
 // .env
 import dotenv from "dotenv"
+
 // middleware
 import morgan from "morgan"
 import { setLoggingColor } from "./middlewares/morganSettings"
 
 // webSocket
 import websocket, { WebSocketServer, WebSocket } from 'ws'
-import { IncomingMessage } from 'http'
+import { IncomingMessage, createServer } from 'http'
 
 // URL package
 import url, { URLSearchParams } from "url"
@@ -38,10 +40,19 @@ import { loginResult } from './objs/login_result'
 import { registerResult } from './objs/register_result'
 import { sendMail } from "./send_email"
 
+// redis
+import { createClient } from 'redis';
+import { JsonWebTokenError } from "jsonwebtoken"
+import { Console } from "console"
+
 // get ur .env as process.env
 dotenv.config()
 
 const app: Application = express()
+
+// redis config
+const client = createClient()
+client.on('error', err => console.log('Redis Client Error', err))
 
 // if process.env.PORT is undefined then port is 5000.
 const port = process.env.PORT || 5000
@@ -63,10 +74,7 @@ app.use(morganMiddleware);
 // 檢查 request.body 的 middleware
 app.use(bodyParser.urlencoded({ extended: false }));
 
-// http server
-let server = app.listen(port, () => {
-    console.log(`Server running http://127.0.0.1:${port}`)
-});
+const server = createServer(app)
 
 let userInfos: userInfo[] = []
 
@@ -75,7 +83,7 @@ let wsRoute = new WebSocketServer({
     server: server
 })
 
-// establish database connection
+// 建立資料庫連線
 myDataSource
     .initialize()
     .then(() => {
@@ -84,6 +92,43 @@ myDataSource
     .catch((err) => {
         console.error("Error during Data Source initialization:", err)
     })
+
+// 測試redis連線
+app.get('/', async(req, res, next) => {
+    await client.connect()
+    console.log('redis connected')
+    await client.disconnect()
+    console.log('redis disconnect')
+    return res.send("finish").end()
+})
+
+// 驗證頁面
+app.get('/auth/:uuid', async (req, res, next) => {
+    await client.connect()
+    let id = req.params.uuid
+
+    const userStr = await client.get(id)
+    let user: User | null = null
+
+    let result = './auth/error.html'
+    if (userStr != null) {
+        result = './auth/index.html'
+        user = JSON.parse(userStr) as User
+        await client.del(id)
+    }
+
+    res.sendFile(result, {root: __dirname})
+
+    if (user != null) {
+        console.log(`user: ${user}`)
+        let newUser = await myDataSource.getRepository(User).create(user)
+        await myDataSource.getRepository(User).save(newUser)
+    } else {
+        console.log('user = null')
+    }
+
+    await client.disconnect()
+})
 
 // Login API
 app.post('/login', express.json(), async (request: Request, response: Response) => {
@@ -150,17 +195,29 @@ app.post('/register', express.json(), async (request: Request, response: Respons
 
         // 將 account email 與 pwd 存於資料庫 return OK
         try {
-            // 取得 User 實體的資料存取物件
-            const new_user =  await myDataSource.getRepository(User).create({
+            await client.connect()
+
+            let uuid = uuidv4()
+
+            // redis
+            await client.set(uuid, JSON.stringify({
                 user_name: request.body.account,
                 sex_id: 2,
                 email: request.body.email,
                 password: request.body.pwd
-            })
-            await myDataSource.getRepository(User).save(new_user)
-            sendMail(new_user.email)
+            }))
+
+            let todayEnd = 24*60*60;
+            console.log(todayEnd)
+            await client.expire(uuid, todayEnd);
+
+            await client.disconnect()
+            
+            // 寄送驗證email
+            sendMail(uuid, request.body.email)
                 .then(result => console.log('Email Sent...', result))
                 .catch((error) => console.log('Error: ', error))
+
         } catch (error) {
             // 以防萬一
             if (error instanceof Error) {
@@ -182,13 +239,25 @@ app.get('/ping', (require: Request, response: Response) => {
     return response.status(200).send("pong pong pong").end()
 })
 
-const router = express.Router();
+const router = express.Router()
 router.use(authenticateToken)
 
+// webSocket 連線
 wsRoute.on('connection',  (ws: WebSocket, req: IncomingMessage) => {
-    req.headers
+    if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
+        ws.close(1011, "token is undefined or null.")
+        return
+    }
+    try {
+        let user = jwtTool.verifyToken(req.headers.token as string)
+    } catch (err: unknown) {
+        if (err instanceof JsonWebTokenError) {
+            ws.close(1011, `${err.message}`)
+            return
+        }
+    }
     if (req.url || req.url == "") {
-        const location = url.parse(req.url) // 取得 Url
+        // const location = url.parse(req.url) // 取得 Url
 
         let searchParams = new URLSearchParams(location.search!!)
         let name = searchParams.has("name") ? searchParams.get("name") as string : ""
@@ -258,23 +327,38 @@ wsRoute.on('connection',  (ws: WebSocket, req: IncomingMessage) => {
     }
 });
 
+// 中斷連線
 let cleanUp = () => {
     isShutdown = true
     console.log(`server is shuting down...`)
+    
+    client.quit().then(() => {
+        console.log('redis quit')
+    }).catch(err => {
+        console.log(err)
+    })
+    
     for (let user of userInfos) {
         user["ws"].send("server close...")
         user["ws"].close()
     }
-    server.close(() => {
+    wsRoute.close()
+    console.log('wsRoute quit')
+    server.close(err => {
+        console.log(err?.message)
         console.log(`server is already shutdown`)
         process.exit()
     })
-
+    
     setTimeout(() => {
         console.error(`could not close connections in time, forcing shut down`)
         process.exit(-1)
-    }, 30 * 1000)
+    }, 10 * 1000)
 }
 
 process.on("SIGINT", cleanUp)
 process.on("SIGTERM", cleanUp)
+
+server.listen(port, () => {
+    console.log(`Server running http://127.0.0.1:${port}`)
+})

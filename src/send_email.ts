@@ -1,10 +1,11 @@
 import nodemailer from "nodemailer"
 import { google } from "googleapis"
+import { User } from "./database/entity/user.entity"
 
 const oAuth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.CLIENT_SECRET, process.env.REDIRECT_URI)
 oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN })
 
-export async function sendMail(user_email: string) {
+export async function sendMail(id: string, email: string) {
     try {
         const accessToken = await oAuth2Client.getAccessToken()
         if (accessToken.token == null) {
@@ -25,10 +26,10 @@ export async function sendMail(user_email: string) {
 
         const mailOptions = {
             from: `<${process.env.USER_MAIL}>`,
-            to: user_email,
+            to: email,
             subject: '居家監控信箱驗證',
             text: '居家監控信箱驗證',
-            html: '<b>點選連結以進行驗證</b>'
+            html: '<b>點選 <a href="http://localhost:3030/auth/' + id + '">連結</a> 以進行驗證</b>'
         }
 
         const result = await transport.sendMail(mailOptions)
