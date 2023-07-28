@@ -8,6 +8,7 @@ oAuth2Client.setCredentials({ refresh_token: process.env.REFRESH_TOKEN })
 export async function sendMail(id: string, email: string) {
     try {
         const accessToken = await oAuth2Client.getAccessToken()
+        console.log(accessToken.token)
         if (accessToken.token == null) {
             return
         }
@@ -29,7 +30,7 @@ export async function sendMail(id: string, email: string) {
             to: email,
             subject: '居家監控信箱驗證',
             text: '居家監控信箱驗證',
-            html: '<b>點選 <a href="http://localhost:3030/auth/' + id + '">連結</a> 以進行驗證</b>'
+            html: '<b>點選 <a href="http://120.110.113.211:3030/auth/' + id + '">連結</a> 以進行驗證</b>'
         }
 
         const result = await transport.sendMail(mailOptions)

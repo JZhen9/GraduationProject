@@ -19,7 +19,7 @@ import userInfo from "./userInfo"
 import { v4 as uuidv4 } from 'uuid'
 
 // methods
-import checkIsValidateURL from "./jesspackages/checkURL"
+import checkIsValidateURL from "./jessPackages/checkURL"
 
 // ORM
 import "reflect-metadata";
@@ -31,19 +31,23 @@ import { myDataSource } from "./database/app_data_source"
 // 檢查 req.body 是否為 undefined || null
 import bodyParser from 'body-parser';
 
-// jwt tool
+// JWT
 import jwtTool, { authenticateToken } from './tools/jwtTool';
+
+// JSON
 import { json } from "stream/consumers"
+import { JsonWebTokenError } from "jsonwebtoken"
 
 // objs
 import { loginResult } from './objs/login_result'
 import { registerResult } from './objs/register_result'
-import { sendMail } from "./send_email"
+import { sendMail } from "./sendEmail"
 
 // redis
 import { createClient } from 'redis';
-import { JsonWebTokenError } from "jsonwebtoken"
-import { Console } from "console"
+
+// jessPackages
+import { connectWS } from "./jessPackages/webSocket/ws"
 
 // get ur .env as process.env
 dotenv.config()
@@ -208,7 +212,7 @@ app.post('/register', express.json(), async (request: Request, response: Respons
             }))
 
             let todayEnd = 24*60*60;
-            console.log(todayEnd)
+            // console.log(todayEnd)
             await client.expire(uuid, todayEnd);
 
             await client.disconnect()
@@ -236,96 +240,20 @@ app.post('/register', express.json(), async (request: Request, response: Respons
 
 // ping pong
 app.get('/ping', (require: Request, response: Response) => {
-    return response.status(200).send("pong pong pong").end()
+    return response.status(200).send("pong").end()
 })
+
+// //test token
+// app.get('/testToken', (require, response) => {
+//     response.writeHead(301, { "Location": authorizationUrl });
+//     return response.status(200).send("ok").end()
+// })
 
 const router = express.Router()
 router.use(authenticateToken)
 
 // webSocket 連線
-wsRoute.on('connection',  (ws: WebSocket, req: IncomingMessage) => {
-    if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
-        ws.close(1011, "token is undefined or null.")
-        return
-    }
-    try {
-        let user = jwtTool.verifyToken(req.headers.token as string)
-    } catch (err: unknown) {
-        if (err instanceof JsonWebTokenError) {
-            ws.close(1011, `${err.message}`)
-            return
-        }
-    }
-    if (req.url || req.url == "") {
-        // const location = url.parse(req.url) // 取得 Url
-
-        let searchParams = new URLSearchParams(location.search!!)
-        let name = searchParams.has("name") ? searchParams.get("name") as string : ""
-        if (!searchParams.has("name")) {
-            ws.close(1011, "name is empty.")
-            return
-        } else if (userInfos.filter(userInfo => userInfo["name"] == name).length == 1) {
-            ws.close(1011, "name is existed.")
-            return
-        }
-        let id = uuidv4()
-        ws.send(`id: ${id} sPname: ${name}`)
-
-        // 加入使用者
-        userInfos.push(new userInfo(id, name, ws))
-
-        const time = new Date()
-        for (let user of userInfos) {
-            // 傳給這次連線的人
-            let userWs = user["ws"]
-
-            userWs.send(`${time.toLocaleTimeString()} / ${name} join to the room.`)
-        }
-
-        // 使用者傳訊息
-        ws.on('message', (msg: websocket.RawData) => { // ws收到訊息時執行 msg是使用者傳來的
-            if (!checkIsValidateURL(msg.toString())) {
-                return
-            }
-
-            let urlMsg = url.parse(msg.toString())
-
-            let protocol = urlMsg.protocol
-
-            if (protocol === "app") {
-                // 當 protocol 為 app
-
-            } else if (protocol === "pi") {
-                // 當 protocol 為 pi
-
-            }
-
-            // ws.send(msg);
-
-            // for (let user of userInfos) {
-            //     let userId = user["id"]
-            //     let userWs = user["ws"]
-
-            //     if (userId != id) {
-            //         userWs.send(`${time.toLocaleTimeString()} / ${name} : ${msg}`)
-            //     }
-            // }
-        });
-
-        // 使用者離線
-        ws.on('close', () => {
-            for (let user of userInfos) {
-                let userId = user["id"]
-                let userWs = user["ws"]
-
-                if (userId != id) {
-                    userWs.send(`${time.toLocaleTimeString()} / ${name} : LEFT`)
-                }
-            }
-            userInfos = userInfos.filter((user) => user["id"] != id)
-        });
-    }
-});
+connectWS(wsRoute, client)
 
 // 中斷連線
 let cleanUp = () => {

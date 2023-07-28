@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
 
 export default class userInfo {
-    constructor(private readonly id: string, private readonly name: string, private readonly ws: WebSocket) {}
+    constructor(private readonly id: string, readonly name: string, private ws: WebSocket) {}
 }

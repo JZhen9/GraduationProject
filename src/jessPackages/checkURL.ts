@@ -7,7 +7,7 @@ export default function checkIsValidateURL(input: string | null): boolean {
     let changeToUrl = url.parse(input)
     let protocol = changeToUrl.protocol || ""
 
-    if (protocol !== "app" && protocol !== "pi"){
+    if (protocol !== "app:" && protocol !== "pi:" && protocol !== "command:"){
         return false
     }
 
