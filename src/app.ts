@@ -243,6 +243,30 @@ app.get('/ping', (require: Request, response: Response) => {
     return response.status(200).send("pong").end()
 })
 
+// check token
+app.post('/checkToken', express.json(), async (require: Request, response: Response) => {
+    // console.log(require.body.token)
+    response.type('json')
+    let success = {
+        msg: "I'm exist!"
+    }
+    let bad = {
+        msg: "bad token :("
+    }
+    let json = JSON.stringify(bad)
+    let user = null
+    try{
+        user = jwtTool.verifyToken(require.body.token as string)
+    } catch {
+        return response.status(404).send(json).end()
+    }
+    if (user != null) {
+        json = JSON.stringify(success)
+        return response.status(200).send(json).end()
+    }
+    return response.status(404).send(json).end()
+})
+
 // //test token
 // app.get('/testToken', (require, response) => {
 //     response.writeHead(301, { "Location": authorizationUrl });

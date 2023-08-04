@@ -13,12 +13,14 @@ import url from "url"
 import { findUserById } from '../findUser'
 import { User } from '../../database/entity/user.entity'
 // userInfos
-import userInfo from '../../userInfo'
+import {idWithWS} from '../../userInfo'
 // redis
 import type { RedisClientType, RedisFunctions, RedisModules, RedisScripts } from 'redis'
 import { isStringObject } from 'util/types'
 import { isErrored } from 'stream'
 import { redis } from 'googleapis/build/src/apis/redis'
+import { addPi, findPiById } from '../findRBP'
+import { RaspberryPi } from '../../database/entity/RaspberryPi.entity'
 
 export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisClient: RedisClientType<{
     graph: {
@@ -42,10 +44,11 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         slowLog: typeof import("/home/lab517/Documents/graduationBackEnd/node_modules/@redis/graph/dist/commands/SLOWLOG");
     };
 } & RedisModules, RedisFunctions, RedisScripts>) {
-    let users: userInfo[] = []
+    let users: idWithWS[] = []
     wsRoute.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         let user_id: number = Number.NaN
         let user_info: User | null = null
+        let pi_info: RaspberryPi | null = null
         let uuid = uuidv4()
         if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
             ws.close(1011, "token is undefined or null.")
@@ -61,15 +64,29 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                 return
             }
 
-            if (user_id != -1) {
-                findUserById(user.userId).then(value => {
+            if (user_id > 0) {
+                findUserById(user_id).then(value => {
                     user_info = value
                     if (user_info == null) {
                         console.log(user_info)
                         ws.close(1011, "user is unfounded.")
                         return
                     }
-                    users.push(new userInfo(user.userId.toString(), user_info.user_name, ws))
+                    users.push(new idWithWS(user_id.toString(), ws))
+                })
+            } else if (user_id < 0) {
+                let idStr = user_id.toString()
+                idStr = idStr.split('-')[1]
+                user_id = Number(idStr)
+                findPiById(user_id).then(value => {
+                    if (value != null) {
+                        addPi(user_id, -1).then(pi => {
+                            pi_info = pi
+                        })
+                    } else {
+                        pi_info = value
+                    }
+                    users.push(new idWithWS(user_id.toString(), ws))
                 })
             }
 
@@ -102,29 +119,25 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
 
             let { protocol, hostname, query } = url.parse(msg.toString(), true)
 
-            if (protocol === "command:") {
-                if (hostname === "listMember") {
-                    let member = []
-                    for (let user of users) {
-                        if (user["ws"] == ws) {
-                            member.push(user["name"])
-                        }
-                    }
-                    ws.send(member.toString())
-                }
-            }
-
             if (protocol === "app:") {
+
+                if (hostname === "check") {
+                    await redisClient.connect()
+                    let k = await redisClient.keys('*')
+                    ws.send(k)
+                    await redisClient.disconnect()
+                }
                 // 當 protocol 為 app
 
                 // user與樹莓派連線
                 if (hostname === "connect") {
-                    if (query.uuid && query.berryName) { 
+                    if (query.uuid) { 
                         if (typeof query.uuid === "string") {
                             if (!redisClient.isOpen) {
                                 await redisClient.connect()
                             }
 
+                            // 找PI
                             if (await redisClient.exists(query.uuid)) {
                                 await redisClient.append(query.uuid, `@${user_id.toString()}`)
                             } else {
@@ -132,12 +145,12 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                                 return
                             }
 
+                            // 找使用者
                             if (await redisClient.exists(user_id.toString())) {
                                 await redisClient.append(user_id.toString(), `@${query.uuid}`)
                             } else {
                                 await redisClient.set(user_id.toString(), query.uuid)
                             }
-                            await redisClient.save()
                         
                             let otherStr = await redisClient.get(user_id.toString())?? ""
                             let others = otherStr.split('@')
@@ -160,13 +173,10 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
             } else if (protocol === "pi:") {
                 // 當 protocol 為 pi
                 if (hostname === "connect") {
-                    if (query.uuid) {
-                        await redisClient.connect()
-                        users.push(new userInfo(query.uuid.toString(), "berryName", ws))
-                        await redisClient.set(query.uuid.toString(), '')
-                        await redisClient.save()
-                        await redisClient.disconnect()
-                    }
+                    await redisClient.connect()
+                    await redisClient.set(user_id.toString(), '')
+                    await redisClient.save()
+                    await redisClient.disconnect()
                 }
 
             }

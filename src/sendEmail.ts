@@ -30,7 +30,7 @@ export async function sendMail(id: string, email: string) {
             to: email,
             subject: '居家監控信箱驗證',
             text: '居家監控信箱驗證',
-            html: '<b>點選 <a href="http://120.110.113.211:3030/auth/' + id + '">連結</a> 以進行驗證</b>'
+            html: '<b>點選 <a href="http://120.110.113.211:8080/auth/' + id + '">連結</a> 以進行驗證</b>'
         }
 
         const result = await transport.sendMail(mailOptions)

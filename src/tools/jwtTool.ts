@@ -21,8 +21,8 @@ const jwtTool = {
   },
 
   verifyToken: (token: string): TokenData => {
-    if (token === "-1") {
-      return {userId : -1};
+    if (token.startsWith("-")) {
+      return {userId : Number(token)};
     }
     const decoded = jwt.verify(token, secret) as TokenData;
     return decoded;
