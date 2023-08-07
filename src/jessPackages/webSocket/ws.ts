@@ -49,7 +49,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         let user_id: number = Number.NaN
         let user_info: User | null = null
         let pi_info: RaspberryPi | null = null
-        let uuid = uuidv4()
+        
         if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
             ws.close(1011, "token is undefined or null.")
             return
@@ -112,8 +112,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         // ws收到訊息時執行 msg是使用者傳來的
         ws.on('message', async (msg: websocket.RawData) => {
             if (!checkIsValidateURL(msg.toString())) {
-                ws.send('no permission')
-                ws.send(msg.toString())
+                ws.send('not messages')
                 return
             }
 
@@ -194,16 +193,20 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         });
 
         // 使用者離線
-        ws.on('close', () => {
-            // for (let user of userInfos) {
-            //     let userId = user["id"]
-            //     let userWs = user["ws"]
+        ws.on('close', async () => {
+            let id = String(user_id)
+            for (let user of users) {
+                let userId = user["id"]
+                let userWs = user["ws"]
 
-            //     if (userId != id) {
-            //         userWs.send(`${time.toLocaleTimeString()} / ${name} : LEFT`)
-            //     }
-            // }
-            // userInfos = userInfos.filter((user) => user["id"] != id)
+                if (userId != id) {
+                    userWs.send(`${id} : LEFT`)
+                }
+            }
+            users = users.filter((user) => user["id"] != id)
+            await redisClient.connect()
+            await redisClient.del(id)
+            await redisClient.disconnect()
         });
     });
 }

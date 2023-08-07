@@ -267,17 +267,13 @@ app.post('/checkToken', express.json(), async (require: Request, response: Respo
     return response.status(404).send(json).end()
 })
 
-// //test token
-// app.get('/testToken', (require, response) => {
-//     response.writeHead(301, { "Location": authorizationUrl });
-//     return response.status(200).send("ok").end()
-// })
-
 const router = express.Router()
 router.use(authenticateToken)
 
 // webSocket 連線
-connectWS(wsRoute, client)
+wsRoute.addListener('connection', () => {
+    connectWS(wsRoute, client)
+})
 
 // 中斷連線
 let cleanUp = () => {
