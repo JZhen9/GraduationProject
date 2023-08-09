@@ -7,7 +7,7 @@ import { JsonWebTokenError } from 'jsonwebtoken'
 // UUID
 import { stringify, v4 as uuidv4 } from 'uuid'
 // jessPackages
-import checkIsValidateURL from "../../jessPackages/checkURL"
+import checkIsValidateMessage from "../../jessPackages/checkURL"
 // URL package
 import url from "url"
 import { findUserById } from '../findUser'
@@ -111,7 +111,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         // 使用者傳訊息
         // ws收到訊息時執行 msg是使用者傳來的
         ws.on('message', async (msg: websocket.RawData) => {
-            if (!checkIsValidateURL(msg.toString())) {
+            if (!checkIsValidateMessage(msg.toString())) {
                 ws.send('not messages')
                 return
             }
@@ -178,6 +178,12 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                     await redisClient.disconnect()
                 }
 
+            } else {
+                for (let others of users) {
+                    if (others['id'] != user_id.toString()) {
+                        others["ws"].send(msg)
+                    }
+                }
             }
 
             // ws.send(msg);
