@@ -4,12 +4,19 @@ export default function checkIsValidateMessage(input: string | null): boolean {
     if (input == "" || input == null) {
         return false
     }
-    // let changeToUrl = url.parse(input)
-    // let protocol = changeToUrl.protocol || ""
+    let changeToUrl = url.parse(input)
+    let protocol = changeToUrl.protocol || ""
 
-    // if (protocol !== "app:" && protocol !== "pi:" && protocol !== "command:"){
-    //     return false
-    // }
+    if (changeToUrl == null) {
+        if (input.startsWith("-------------- Matched Type:")) {
+            return true
+        }
+        return false
+    } else {
+        if (protocol !== "app:" && protocol !== "pi:" && protocol !== "command:"){
+            return false
+        }
+    }
 
     return true
 }

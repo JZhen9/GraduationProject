@@ -111,14 +111,32 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         // 使用者傳訊息
         // ws收到訊息時執行 msg是使用者傳來的
         ws.on('message', async (msg: websocket.RawData) => {
+            // console.log(msg.toString())
+            // console.log(checkIsValidateMessage(msg.toString()))
             if (!checkIsValidateMessage(msg.toString())) {
-                ws.send('not messages')
+                if (user_id != 333) {
+                    ws.send('not messages')
+                } else {
+                    ws.send(`@${user_id.toString()}`)
+                }
                 return
             }
 
             let { protocol, hostname, query } = url.parse(msg.toString(), true)
 
             if (protocol === "app:") {
+
+                if (hostname === "record") {
+                    if (query.uuid && query.uuid != null) {
+                        let pi = await redisClient.get(query.uuid.toString())
+                        if (pi == null) {
+                            ws.send("record: cannot found uuid")
+                            return
+                        }
+                        // 找特定的pi 要在使用者的pi list中
+                        
+                    }
+                }
 
                 if (hostname === "check") {
                     await redisClient.connect()
@@ -173,9 +191,11 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                 // 當 protocol 為 pi
                 if (hostname === "connect") {
                     await redisClient.connect()
-                    await redisClient.set(user_id.toString(), '')
-                    await redisClient.save()
-                    await redisClient.disconnect()
+                    let pi = await redisClient.exists(user_id.toString())
+                    if (pi == null) {
+                        await redisClient.set(user_id.toString(), '')
+                        await redisClient.disconnect()
+                    }
                 }
 
             } else {

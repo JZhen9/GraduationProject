@@ -257,10 +257,14 @@ app.post('/checkToken', express.json(), async (require: Request, response: Respo
     let user = null
     try{
         user = jwtTool.verifyToken(require.body.token as string)
+        
     } catch {
         return response.status(404).send(json).end()
     }
     if (user != null) {
+        let id = user.userId
+        let user_entity = await myDataSource.getRepository(User).findBy({user_id: id})
+        success.msg = `I'm ${user_entity[0].user_name}`
         json = JSON.stringify(success)
         return response.status(200).send(json).end()
     }
