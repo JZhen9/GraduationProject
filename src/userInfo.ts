@@ -5,5 +5,5 @@ export default class userInfo {
 }
 
 export class idWithWS{
-    constructor(private readonly id: string, private ws: WebSocket){}
+    constructor(private readonly id: string, private ws: WebSocket, private isUser: boolean){}
 }

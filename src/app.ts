@@ -18,8 +18,8 @@ import userInfo from "./userInfo"
 // UUID
 import { v4 as uuidv4 } from 'uuid'
 
-// methods
-import checkIsValidateURL from "./jessPackages/checkURL"
+// upload
+import { upload } from "./upload"
 
 // ORM
 import "reflect-metadata";
@@ -98,7 +98,7 @@ myDataSource
     })
 
 // 測試redis連線
-app.get('/', async(req, res, next) => {
+app.get('/', async (req, res, next) => {
     await client.connect()
     console.log('redis connected')
     await client.disconnect()
@@ -121,7 +121,7 @@ app.get('/auth/:uuid', async (req, res, next) => {
         await client.del(id)
     }
 
-    res.sendFile(result, {root: __dirname})
+    res.sendFile(result, { root: __dirname })
 
     if (user != null) {
         console.log(`user: ${user}`)
@@ -162,7 +162,7 @@ app.post('/login', express.json(), async (request: Request, response: Response) 
             }
         })
 
-        if (user_info == null){
+        if (user_info == null) {
             failedLogin.resultStatus = 400
             failedLogin.errorMessage = "帳號密碼錯誤"
             json = JSON.stringify(failedLogin)
@@ -176,7 +176,7 @@ app.post('/login', express.json(), async (request: Request, response: Response) 
 
         return response.send(json).end()
     }
-    
+
     return response.status(400).send(json).end()
 })
 
@@ -211,12 +211,12 @@ app.post('/register', express.json(), async (request: Request, response: Respons
                 password: request.body.pwd
             }))
 
-            let todayEnd = 24*60*60;
+            let todayEnd = 24 * 60 * 60;
             // console.log(todayEnd)
             await client.expire(uuid, todayEnd);
 
             await client.disconnect()
-            
+
             // 寄送驗證email
             sendMail(uuid, request.body.email)
                 .then(result => console.log('Email Sent...', result))
@@ -243,6 +243,11 @@ app.get('/ping', (require: Request, response: Response) => {
     return response.status(200).send("pong").end()
 })
 
+app.post('/upload', upload.single('file'), (req, res) => {
+    // Handle the uploaded file
+    res.json({ message: 'File uploaded successfully!' });
+});
+
 // check token
 app.post('/checkToken', express.json(), async (require: Request, response: Response) => {
     // console.log(require.body.token)
@@ -255,15 +260,15 @@ app.post('/checkToken', express.json(), async (require: Request, response: Respo
     }
     let json = JSON.stringify(bad)
     let user = null
-    try{
+    try {
         user = jwtTool.verifyToken(require.body.token as string)
-        
+
     } catch {
         return response.status(404).send(json).end()
     }
     if (user != null) {
         let id = user.userId
-        let user_entity = await myDataSource.getRepository(User).findBy({user_id: id})
+        let user_entity = await myDataSource.getRepository(User).findBy({ user_id: id })
         success.msg = `I'm ${user_entity[0].user_name}`
         json = JSON.stringify(success)
         return response.status(200).send(json).end()
@@ -275,21 +280,19 @@ const router = express.Router()
 router.use(authenticateToken)
 
 // webSocket 連線
-wsRoute.addListener('connection', () => {
-    connectWS(wsRoute, client)
-})
+connectWS(wsRoute, client)
 
 // 中斷連線
 let cleanUp = () => {
     isShutdown = true
     console.log(`server is shuting down...`)
-    
+
     client.quit().then(() => {
         console.log('redis quit')
     }).catch(err => {
         console.log(err)
     })
-    
+
     for (let user of userInfos) {
         user["ws"].send("server close...")
         user["ws"].close()
@@ -301,7 +304,7 @@ let cleanUp = () => {
         console.log(`server is already shutdown`)
         process.exit()
     })
-    
+
     setTimeout(() => {
         console.error(`could not close connections in time, forcing shut down`)
         process.exit(-1)

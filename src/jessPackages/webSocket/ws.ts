@@ -21,11 +21,12 @@ import { isErrored } from 'stream'
 import { redis } from 'googleapis/build/src/apis/redis'
 import { addPi, findPiById } from '../findRBP'
 import { RaspberryPi } from '../../database/entity/RaspberryPi.entity'
+import { kMaxLength } from 'buffer'
 
 export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisClient: RedisClientType<{
     graph: {
-        CONFIG_GET: typeof import("/home/lab517/Documents/graduationBackEnd/node_modules/@redis/graph/dist/commands/CONFIG_GET");
-        configGet: typeof import("/home/lab517/Documents/graduationBackEnd/node_modules/@redis/graph/dist/commands/CONFIG_GET");
+        CONFIG_GET: typeof import("@redis/graph/dist/commands/CONFIG_GET");
+        configGet: typeof import("@redis/graph/dist/commands/CONFIG_GET");
         CONFIG_SET: typeof import("@redis/graph/dist/commands/CONFIG_SET");
         configSet: typeof import("@redis/graph/dist/commands/CONFIG_SET");
         DELETE: typeof import("@redis/graph/dist/commands/DELETE");
@@ -41,7 +42,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         RO_QUERY: typeof import("@redis/graph/dist/commands/RO_QUERY");
         roQuery: typeof import("@redis/graph/dist/commands/RO_QUERY");
         SLOWLOG: typeof import("@redis/graph/dist/commands/SLOWLOG");
-        slowLog: typeof import("/home/lab517/Documents/graduationBackEnd/node_modules/@redis/graph/dist/commands/SLOWLOG");
+        slowLog: typeof import("@redis/graph/dist/commands/SLOWLOG");
     };
 } & RedisModules, RedisFunctions, RedisScripts>) {
     let users: idWithWS[] = []
@@ -49,6 +50,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         let user_id: number = Number.NaN
         let user_info: User | null = null
         let pi_info: RaspberryPi | null = null
+        let isUser: boolean
         
         if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
             ws.close(1011, "token is undefined or null.")
@@ -56,6 +58,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         }
         try {
             let user = jwtTool.verifyToken(req.headers.token as string)
+            console.log(user)
 
             if (user != null) {
                 user_id = user.userId
@@ -65,20 +68,30 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
             }
 
             if (user_id > 0) {
-                findUserById(user_id).then(value => {
+                findUserById(user_id).then(async value => {
+                    let new_user_id = 'u' + user_id;
                     user_info = value
-                    if (user_info == null) {
+                    if (user_info === null) {
                         console.log(user_info)
                         ws.close(1011, "user is unfounded.")
                         return
                     }
-                    users.push(new idWithWS(user_id.toString(), ws))
+                    await redisClient.connect()
+                    await redisClient.set(new_user_id.toString(), "")
+                    await redisClient.save()
+                    await redisClient.disconnect()
+
+                    users.push(new idWithWS(new_user_id.toString(), ws, true))
+                    isUser = true
+                    ws.send(`welcome ${new_user_id}`)
                 })
             } else if (user_id < 0) {
+                // pi 第一次連線
                 let idStr = user_id.toString()
                 idStr = idStr.split('-')[1]
                 user_id = Number(idStr)
-                findPiById(user_id).then(value => {
+                findPiById(user_id).then(async value => {
+                    let new_user_id = 'p' + user_id;
                     if (value != null) {
                         addPi(user_id, -1).then(pi => {
                             pi_info = pi
@@ -86,8 +99,17 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                     } else {
                         pi_info = value
                     }
-                    users.push(new idWithWS(user_id.toString(), ws))
+                    await redisClient.connect()
+                    await redisClient.set(new_user_id.toString(), "")
+                    await redisClient.save()
+                    await redisClient.disconnect()
+
+                    users.push(new idWithWS(new_user_id.toString(), ws, false))
+                    isUser = false
+                    ws.send(`welcome ${new_user_id}`)
                 })
+            } else {
+                console.log("else")
             }
 
         } catch (err: unknown) {
@@ -111,7 +133,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         // 使用者傳訊息
         // ws收到訊息時執行 msg是使用者傳來的
         ws.on('message', async (msg: websocket.RawData) => {
-            // console.log(msg.toString())
+            console.log(msg.toString())
             // console.log(checkIsValidateMessage(msg.toString()))
             if (!checkIsValidateMessage(msg.toString())) {
                 if (user_id != 333) {
@@ -125,17 +147,49 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
             let { protocol, hostname, query } = url.parse(msg.toString(), true)
 
             if (protocol === "app:") {
-
-                if (hostname === "record") {
+                if (!redisClient.isOpen) {
+                    await redisClient.connect()
+                }
+                console.log(hostname)
+                if (hostname === "startrec") {
+                    console.log("start recrec")
                     if (query.uuid && query.uuid != null) {
                         let pi = await redisClient.get(query.uuid.toString())
                         if (pi == null) {
                             ws.send("record: cannot found uuid")
                             return
+                        } else {
+                            console.log("oooooooh")
+                            // 找特定的pi開始錄音
+                            for (let user of users) {
+                                if (user["id"] === query.uuid.toString()) {
+                                    console.log(`start rec with ${query.uuid.toString()}`)
+                                    user["ws"].send("pi://startRec?")
+                                }
+                            }
                         }
-                        // 找特定的pi 要在使用者的pi list中
                         
                     }
+                } else if (hostname === "stoprec") {
+                    console.log("stop recrec")
+                    if (query.uuid && query.uuid != null) {
+                        let pi = await redisClient.get(query.uuid.toString())
+                        if (pi == null) {
+                            ws.send("record: cannot found uuid")
+                            return
+                        } else {
+                            // 找特定的pi開始錄音
+                            for (let user of users) {
+                                if (user["id"] === query.uuid.toString()) {
+                                    user["ws"].send("pi://stopRec?")
+                                }
+                            }
+                        }
+                        
+                    }
+                }
+                if (redisClient.isOpen) {
+                    await redisClient.disconnect()
                 }
 
                 if (hostname === "check") {
@@ -169,13 +223,13 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                                 await redisClient.set(user_id.toString(), query.uuid)
                             }
                         
-                            let otherStr = await redisClient.get(user_id.toString())?? ""
-                            let others = otherStr.split('@')
+                            let otherStr = await redisClient.get(user_id.toString())?? "" 
+                            let othersPi = otherStr.split('@')
                             let ar: string[] = []
-                            for (let other of users) {
-                                if (others.includes(other["id"])) {
-                                    other["ws"].send(`id: ${user_id} connect with me.`)
-                                    ar.push(other["id"])
+                            for (let user of users) {
+                                if (othersPi.includes(user["id"])) {
+                                    user["ws"].send(`id: ${user_id} connect with me.`)
+                                    ar.push(user["id"])
                                 }
                             }
                             ws.send(ar.join(" "))
@@ -196,6 +250,8 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                         await redisClient.set(user_id.toString(), '')
                         await redisClient.disconnect()
                     }
+                } else if (hostname === "startRec" || hostname === "stopRec") {
+                    // java自動執行
                 }
 
             } else {
@@ -221,6 +277,11 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         // 使用者離線
         ws.on('close', async () => {
             let id = String(user_id)
+            if (isUser) {
+                id = 'u' + id
+            } else {
+                id = 'p' + id
+            }
             for (let user of users) {
                 let userId = user["id"]
                 let userWs = user["ws"]
@@ -230,9 +291,13 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                 }
             }
             users = users.filter((user) => user["id"] != id)
-            await redisClient.connect()
+            if (!redisClient.isOpen) {
+                await redisClient.connect()
+            }
             await redisClient.del(id)
-            await redisClient.disconnect()
+            if (redisClient.isOpen) {
+                await redisClient.disconnect()
+            }
         });
     });
 }

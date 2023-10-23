@@ -10,6 +10,8 @@ export default function checkIsValidateMessage(input: string | null): boolean {
     if (changeToUrl == null) {
         if (input.startsWith("-------------- Matched Type:")) {
             return true
+        } else if (input.startsWith("!")) {
+            return true
         }
         return false
     } else {
