@@ -13,7 +13,7 @@ import url from "url"
 import { findUserById } from '../findUser'
 import { User } from '../../database/entity/user.entity'
 // userInfos
-import {idWithWS} from '../../userInfo'
+import { idWithWS } from '../../userInfo'
 // redis
 import type { RedisClientType, RedisFunctions, RedisModules, RedisScripts } from 'redis'
 import { isStringObject } from 'util/types'
@@ -51,7 +51,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         let user_info: User | null = null
         let pi_info: RaspberryPi | null = null
         let isUser: boolean
-        
+
         if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
             ws.close(1011, "token is undefined or null.")
             return
@@ -127,7 +127,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         //             others["ws"].send(`${time.toLocaleTimeString()} / ${user.name} join to the room.`)
         //         }
         //     }
-            
+
         // }
 
         // 使用者傳訊息
@@ -136,11 +136,11 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
             console.log(msg.toString())
             // console.log(checkIsValidateMessage(msg.toString()))
             if (!checkIsValidateMessage(msg.toString())) {
-                if (user_id != 333) {
-                    ws.send('not messages')
-                } else {
-                    ws.send(`@${user_id.toString()}`)
-                }
+                // if (user_id != 1) {
+                ws.send('not messages')
+                // } else {
+                //     ws.send(`@${user_id.toString()}`)
+                // }
                 return
             }
 
@@ -164,11 +164,11 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                             for (let user of users) {
                                 if (user["id"] === query.uuid.toString()) {
                                     console.log(`start rec with ${query.uuid.toString()}`)
-                                    user["ws"].send("pi://startRec?")
+                                    user["ws"].send("pi://startRec")
                                 }
                             }
                         }
-                        
+
                     }
                 } else if (hostname === "stoprec") {
                     console.log("stop recrec")
@@ -181,11 +181,11 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                             // 找特定的pi開始錄音
                             for (let user of users) {
                                 if (user["id"] === query.uuid.toString()) {
-                                    user["ws"].send("pi://stopRec?")
+                                    user["ws"].send("pi://stopRec")
                                 }
                             }
                         }
-                        
+
                     }
                 }
                 if (redisClient.isOpen) {
@@ -202,7 +202,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
 
                 // user與樹莓派連線
                 if (hostname === "connect") {
-                    if (query.uuid) { 
+                    if (query.uuid) {
                         if (typeof query.uuid === "string") {
                             if (!redisClient.isOpen) {
                                 await redisClient.connect()
@@ -222,8 +222,8 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                             } else {
                                 await redisClient.set(user_id.toString(), query.uuid)
                             }
-                        
-                            let otherStr = await redisClient.get(user_id.toString())?? "" 
+
+                            let otherStr = await redisClient.get(user_id.toString()) ?? ""
                             let othersPi = otherStr.split('@')
                             let ar: string[] = []
                             for (let user of users) {
@@ -238,7 +238,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                             await redisClient.disconnect()
                         }
                     }
-                    
+
                 }
 
             } else if (protocol === "pi:") {

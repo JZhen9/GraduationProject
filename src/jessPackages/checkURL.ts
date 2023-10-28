@@ -7,15 +7,16 @@ export default function checkIsValidateMessage(input: string | null): boolean {
     let changeToUrl = url.parse(input)
     let protocol = changeToUrl.protocol || ""
 
+    if (input.startsWith("-------------- Matched Type:")) {
+        return true
+    } else if (input.startsWith("!")) {
+        return true
+    }
+
     if (changeToUrl == null) {
-        if (input.startsWith("-------------- Matched Type:")) {
-            return true
-        } else if (input.startsWith("!")) {
-            return true
-        }
         return false
     } else {
-        if (protocol !== "app:" && protocol !== "pi:" && protocol !== "command:"){
+        if (protocol !== "app:" && protocol !== "pi:") {
             return false
         }
     }
