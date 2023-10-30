@@ -51,6 +51,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         let user_info: User | null = null
         let pi_info: RaspberryPi | null = null
         let isUser: boolean
+        let new_user_id: String = ""
 
         if (req.headers.token == undefined || req.headers.token == null || req.headers.token.length == 0) {
             ws.close(1011, "token is undefined or null.")
@@ -69,7 +70,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
 
             if (user_id > 0) {
                 findUserById(user_id).then(async value => {
-                    let new_user_id = 'u' + user_id;
+                    new_user_id = 'u' + user_id;
                     user_info = value
                     if (user_info === null) {
                         console.log(user_info)
@@ -91,7 +92,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                 idStr = idStr.split('-')[1]
                 user_id = Number(idStr)
                 findPiById(user_id).then(async value => {
-                    let new_user_id = 'p' + user_id;
+                    new_user_id = 'p' + user_id;
                     if (value != null) {
                         addPi(user_id, -1).then(pi => {
                             pi_info = pi
@@ -133,7 +134,7 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
         // 使用者傳訊息
         // ws收到訊息時執行 msg是使用者傳來的
         ws.on('message', async (msg: websocket.RawData) => {
-            console.log(msg.toString())
+            // console.log(msg.toString())
             // console.log(checkIsValidateMessage(msg.toString()))
             if (!checkIsValidateMessage(msg.toString())) {
                 // if (user_id != 1) {
@@ -142,6 +143,27 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                 //     ws.send(`@${user_id.toString()}`)
                 // }
                 return
+            }
+
+            if (msg.toString().startsWith("---")) {
+                // pi://result?name=???
+                let del_str = "-------------- Matched Type:"
+                let str_msg = msg.toString()
+                str_msg = str_msg.replace(del_str, '')
+                let voiceName = str_msg.split(' ')[0]
+                if (!redisClient.isOpen) {
+                    await redisClient.connect()
+                }
+                // 向所有連線的 app user 傳送辨識通知
+                for (let user of users) {
+                    let val = await redisClient.get(user["id"])
+                    if (val?.includes(new_user_id.toString())) {
+                        user["ws"].send(`pi://result?name=${voiceName}`)
+                    }
+                }
+                if (redisClient.isOpen) {
+                    await redisClient.disconnect()
+                }
             }
 
             let { protocol, hostname, query } = url.parse(msg.toString(), true)
@@ -210,25 +232,29 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
 
                             // 找PI
                             if (await redisClient.exists(query.uuid)) {
-                                await redisClient.append(query.uuid, `@${user_id.toString()}`)
+                                await redisClient.append(query.uuid, `@${new_user_id.toString()}`)
                             } else {
                                 ws.send("error uuid")
                                 return
                             }
 
                             // 找使用者
-                            if (await redisClient.exists(user_id.toString())) {
-                                await redisClient.append(user_id.toString(), `@${query.uuid}`)
+                            if (await redisClient.exists(new_user_id.toString())) {
+                                let val = await redisClient.get(new_user_id.toString())
+                                if (!val?.includes(query.uuid)) {
+                                    await redisClient.append(new_user_id.toString(), `@${query.uuid}`)
+                                }
+                                console.log(`${new_user_id.toString()} : ${val} : ${query.uuid}`)
                             } else {
-                                await redisClient.set(user_id.toString(), query.uuid)
+                                await redisClient.set(new_user_id.toString(), query.uuid)
                             }
 
-                            let otherStr = await redisClient.get(user_id.toString()) ?? ""
+                            let otherStr = await redisClient.get(new_user_id.toString()) ?? ""
                             let othersPi = otherStr.split('@')
                             let ar: string[] = []
                             for (let user of users) {
                                 if (othersPi.includes(user["id"])) {
-                                    user["ws"].send(`id: ${user_id} connect with me.`)
+                                    user["ws"].send(`id: ${new_user_id} connect with me.`)
                                     ar.push(user["id"])
                                 }
                             }
@@ -245,9 +271,9 @@ export function connectWS(wsRoute: websocket.Server<websocket.WebSocket>, redisC
                 // 當 protocol 為 pi
                 if (hostname === "connect") {
                     await redisClient.connect()
-                    let pi = await redisClient.exists(user_id.toString())
+                    let pi = await redisClient.exists(new_user_id.toString())
                     if (pi == null) {
-                        await redisClient.set(user_id.toString(), '')
+                        await redisClient.set(new_user_id.toString(), '')
                         await redisClient.disconnect()
                     }
                 } else if (hostname === "startRec" || hostname === "stopRec") {
